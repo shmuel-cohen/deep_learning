@@ -1,7 +1,9 @@
 import random
+import numpy as np
 
 pos_path = "pos_A0201.txt"
 neg_path = "neg_A0201.txt"
+AMINO_ACID_NUMBER = 20
 def read_file(pos_path, neg_path):
     def read_data_from_file(file_name):
         try:
@@ -36,6 +38,22 @@ def read_file(pos_path, neg_path):
 
 pos_train_data, neg_train_data, pos_test_data, neg_test_data = read_file(pos_path, neg_path)
 
+def convert_to_binary_vector(peptides_list, amino_acid_dict):
+    def peptide_to_binary_vector(peptide):
+        n = len(peptide)
+        vec = np.zeros(n * AMINO_ACID_NUMBER)
+        for i in range(n):
+            vec[i * AMINO_ACID_NUMBER + amino_acid_dict[peptide[i]]] = 1
+        return vec
+    return [peptide_to_binary_vector(peptide) for peptide in peptides_list] # todo maybe return as matrix instead of list
+
+amino_acid_dict = {
+    "A": 0, "C": 1, "D": 2, "E": 3, "F": 4,
+    "G": 5, "H": 6, "I": 7, "K": 8, "L": 9,
+    "M": 10, "N": 11, "P": 12, "Q": 13, "R": 14,
+    "S": 15, "T": 16, "V": 17, "W": 18, "Y": 19
+}
+print(convert_to_binary_vector(pos_train_data, amino_acid_dict)[0],"\n", pos_train_data[0])
 
 ### from gpt
 import torch
