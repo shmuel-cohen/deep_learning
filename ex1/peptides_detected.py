@@ -83,32 +83,6 @@ def train(model, train_data, optimizer, criterion, num_epochs=100):
         if (epoch+1) % 10 == 0:
             print('Epoch [{}/{}], Loss: {:.4f}'.format(epoch+1, num_epochs, total_loss))
 
-# Prepare data for training
-pos_train_data_tensor = torch.tensor(pos_train_data, dtype=torch.float32)
-neg_train_data_tensor = torch.tensor(neg_train_data, dtype=torch.float32)
-pos_train_labels_tensor = torch.ones(pos_train_data_tensor.size(0), 1)
-neg_train_labels_tensor = torch.zeros(neg_train_data_tensor.size(0), 1)
-
-# Concatenate positive and negative training data
-train_data = torch.cat((pos_train_data_tensor, neg_train_data_tensor), 0)
-train_labels = torch.cat((pos_train_labels_tensor, neg_train_labels_tensor), 0)
-
-# Combine data and labels
-train_data = torch.cat((train_data, train_labels), 1)
-
-# Shuffle the data
-train_data = train_data[torch.randperm(train_data.size(0))]
-
-# Define the model, loss function, and optimizer
-input_size = len(pos_train_data[0])
-hidden_size = 10
-model = SimpleNN(input_size, hidden_size)
-criterion = nn.BCELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-# Train the model
-train(model, train_data, optimizer, criterion, num_epochs=100)
-
 
 
 def main():
@@ -123,6 +97,35 @@ def main():
     }
     print(convert_to_binary_vector(pos_train_data, amino_acid_dict)[0], "\n",
           pos_train_data[0])
+
+    # Prepare data for training
+    pos_train_data_tensor = torch.tensor(pos_train_data, dtype=torch.float32)
+    neg_train_data_tensor = torch.tensor(neg_train_data, dtype=torch.float32)
+    pos_train_labels_tensor = torch.ones(pos_train_data_tensor.size(0), 1)
+    neg_train_labels_tensor = torch.zeros(neg_train_data_tensor.size(0), 1)
+
+    # Concatenate positive and negative training data
+    train_data = torch.cat((pos_train_data_tensor, neg_train_data_tensor), 0)
+    train_labels = torch.cat(
+        (pos_train_labels_tensor, neg_train_labels_tensor), 0)
+
+    # Combine data and labels
+    train_data = torch.cat((train_data, train_labels), 1)
+
+    # Shuffle the data
+    train_data = train_data[torch.randperm(train_data.size(0))]
+
+    # Define the model, loss function, and optimizer
+    input_size = len(pos_train_data[0])
+    hidden_size = 10
+    model = SimpleNN(input_size, hidden_size)
+    criterion = nn.BCELoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+    # Train the model
+    train(model, train_data, optimizer, criterion, num_epochs=100)
+
+
 
 
 
