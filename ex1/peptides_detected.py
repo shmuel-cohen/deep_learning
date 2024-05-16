@@ -1,10 +1,10 @@
 import random
 import numpy as np
 
-pos_path = "pos_A0201.txt"
-neg_path = "neg_A0201.txt"
 AMINO_ACID_NUMBER = 20
-def read_file(pos_path, neg_path):
+
+
+def read_file(pos_path: str, neg_path: str) -> tuple[list[str],list[str],list[str],list[str]]:
     def read_data_from_file(file_name):
         try:
             with open(file_name, "r") as file:
@@ -30,13 +30,9 @@ def read_file(pos_path, neg_path):
                      peptide not in pos_train_data]
     neg_test_data = [peptide for peptide in neg_peptides if
                      peptide not in neg_train_data]
-    print(len(pos_train_data))
-    print(len(neg_train_data))
-    print(len(pos_test_data))
-    print(len(neg_test_data))
+
     return pos_train_data, neg_train_data, pos_test_data, neg_test_data
 
-pos_train_data, neg_train_data, pos_test_data, neg_test_data = read_file(pos_path, neg_path)
 
 def convert_to_binary_vector(peptides_list, amino_acid_dict):
     def peptide_to_binary_vector(peptide):
@@ -47,13 +43,6 @@ def convert_to_binary_vector(peptides_list, amino_acid_dict):
         return vec
     return [peptide_to_binary_vector(peptide) for peptide in peptides_list] # todo maybe return as matrix instead of list
 
-amino_acid_dict = {
-    "A": 0, "C": 1, "D": 2, "E": 3, "F": 4,
-    "G": 5, "H": 6, "I": 7, "K": 8, "L": 9,
-    "M": 10, "N": 11, "P": 12, "Q": 13, "R": 14,
-    "S": 15, "T": 16, "V": 17, "W": 18, "Y": 19
-}
-print(convert_to_binary_vector(pos_train_data, amino_acid_dict)[0],"\n", pos_train_data[0])
 
 ### from gpt
 import torch
@@ -66,14 +55,18 @@ class SimpleNN(nn.Module):
         super(SimpleNN, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(hidden_size, 1)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc3 = nn.Linear(hidden_size, 1)
         self.softmax = nn.Softmax()
+
 
     def forward(self, x):
         out = self.fc1(x)
         out = self.relu(out)
         out = self.fc2(out)
-        out = self.sigmoid(out)
+        out = self.relu(out)
+        out = self.fc3(out)
+        out = self.softmax(out)
         return out
 
 # Define training function
@@ -116,6 +109,20 @@ optimizer = optim.Adam(model.parameters(), lr=0.001)
 # Train the model
 train(model, train_data, optimizer, criterion, num_epochs=100)
 
+
+
+def main():
+    pos_path = "pos_A0201.txt"
+    neg_path = "neg_A0201.txt"
+    pos_train_data, neg_train_data, pos_test_data, neg_test_data = read_file(pos_path, neg_path)
+    amino_acid_dict = {
+        "A": 0, "C": 1, "D": 2, "E": 3, "F": 4,
+        "G": 5, "H": 6, "I": 7, "K": 8, "L": 9,
+        "M": 10, "N": 11, "P": 12, "Q": 13, "R": 14,
+        "S": 15, "T": 16, "V": 17, "W": 18, "Y": 19
+    }
+    print(convert_to_binary_vector(pos_train_data, amino_acid_dict)[0], "\n",
+          pos_train_data[0])
 
 
 
