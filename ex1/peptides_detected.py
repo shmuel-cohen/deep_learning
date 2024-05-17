@@ -34,14 +34,15 @@ def read_file(pos_path: str, neg_path: str) -> tuple[list[str],list[str],list[st
     return pos_train_data, neg_train_data, pos_test_data, neg_test_data
 
 
-def convert_to_binary_vector(peptides_list, amino_acid_dict):
-    def peptide_to_binary_vector(peptide):
-        n = len(peptide)
-        vec = np.zeros(n * AMINO_ACID_NUMBER)
-        for i in range(n):
-            vec[i * AMINO_ACID_NUMBER + amino_acid_dict[peptide[i]]] = 1
-        return vec
-    return [peptide_to_binary_vector(peptide) for peptide in peptides_list] # todo maybe return as matrix instead of list
+def convert_to_binary_vector(peptides_list: list[str], amino_acid_dict: dict):
+    num_samples = len(peptides_list)
+    peptide_len = len(peptides_list[0])
+    input_size = len(peptides_list[0] * AMINO_ACID_NUMBER)
+    data = np.zeros(num_samples, input_size)
+    for i in range(num_samples):
+        for j in range(peptide_len):
+            data[j*AMINO_ACID_NUMBER + amino_acid_dict[peptides_list[j]], i] =1
+    return data
 
 
 ### from gpt
@@ -70,19 +71,41 @@ class SimpleNN(nn.Module):
         return out
 
 # Define training function
-def train(model, train_data, optimizer, criterion, num_epochs=100):
+def train_model(model, criterion, optimizer, train_loader, test_loader,
+                num_epochs):
+    train_losses = []
+    test_losses = []
+
     for epoch in range(num_epochs):
-        total_loss = 0
-        for data, target in train_data:
+        model.train()
+        running_loss = 0.0
+        for inputs, targets in train_loader:
             optimizer.zero_grad()
-            output = model(data)
-            loss = criterion(output, target)
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
             loss.backward()
             optimizer.step()
-            total_loss += loss.item()
-        if (epoch+1) % 10 == 0:
-            print('Epoch [{}/{}], Loss: {:.4f}'.format(epoch+1, num_epochs, total_loss))
+            running_loss += loss.item()
 
+        train_loss = running_loss / len(train_loader)
+        train_losses.append(train_loss)
+
+        # Test the model
+        model.eval()
+        running_test_loss = 0.0
+        with torch.no_grad():
+            for inputs, targets in test_loader:
+                outputs = model(inputs)
+                test_loss = criterion(outputs, targets)
+                running_test_loss += test_loss.item()
+
+        test_loss = running_test_loss / len(test_loader)
+        test_losses.append(test_loss)
+
+        print(
+            f'Epoch [{epoch + 1}/{num_epochs}], Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}')
+
+    return train_losses, test_losses
 
 
 def main():
@@ -95,35 +118,73 @@ def main():
         "M": 10, "N": 11, "P": 12, "Q": 13, "R": 14,
         "S": 15, "T": 16, "V": 17, "W": 18, "Y": 19
     }
-    print(convert_to_binary_vector(pos_train_data, amino_acid_dict)[0], "\n",
-          pos_train_data[0])
 
-    # Prepare data for training
-    pos_train_data_tensor = torch.tensor(pos_train_data, dtype=torch.float32)
-    neg_train_data_tensor = torch.tensor(neg_train_data, dtype=torch.float32)
-    pos_train_labels_tensor = torch.ones(pos_train_data_tensor.size(0), 1)
-    neg_train_labels_tensor = torch.zeros(neg_train_data_tensor.size(0), 1)
+    # Assuming read_file function returns numpy arrays
+    pos_train_data, neg_train_data, pos_test_data, neg_test_data = read_file(
+        pos_path, neg_path)
 
     # Concatenate positive and negative training data
-    train_data = torch.cat((pos_train_data_tensor, neg_train_data_tensor), 0)
-    train_labels = torch.cat(
-        (pos_train_labels_tensor, neg_train_labels_tensor), 0)
+    X_train = np.concatenate((convert_to_binary_vector(pos_train_data, amino_acid_dict),
+                              convert_to_binary_vector(neg_train_data, amino_acid_dict)), axis=0)
 
-    # Combine data and labels
-    train_data = torch.cat((train_data, train_labels), 1)
+    # Create labels for training data
+    y_train_pos = np.ones((len(pos_train_data), 1))  # Positive class label
+    y_train_neg = np.zeros((len(neg_train_data), 1))  # Negative class label
+    y_train = np.concatenate((y_train_pos, y_train_neg), axis=0)
 
-    # Shuffle the data
-    train_data = train_data[torch.randperm(train_data.size(0))]
 
-    # Define the model, loss function, and optimizer
-    input_size = len(pos_train_data[0])
-    hidden_size = 10
-    model = SimpleNN(input_size, hidden_size)
+
+    # Generate random data
+    num_samples = 1000
+    input_size = 180
+    output_size = 1
+
+    X_train = np.random.randn(num_samples, input_size).astype(np.float32)
+    y_train = np.random.randint(2, size=(num_samples, output_size)).astype(
+        np.float32)
+
+    X_test = np.random.randn(num_samples // 2, input_size).astype(np.float32)
+    y_test = np.random.randint(2, size=(num_samples // 2, output_size)).astype(
+        np.float32)
+
+    # Convert numpy arrays to PyTorch tensors
+    X_train_tensor = torch.tensor(X_train)
+    y_train_tensor = torch.tensor(y_train)
+
+    X_test_tensor = torch.tensor(X_test)
+    y_test_tensor = torch.tensor(y_test)
+
+    # Create data loaders
+    train_dataset = torch.utils.data.TensorDataset(X_train_tensor,
+                                                   y_train_tensor)
+    test_dataset = torch.utils.data.TensorDataset(X_test_tensor, y_test_tensor)
+
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=32,
+                                               shuffle=True)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=32,
+                                              shuffle=False)
+
+    # Define the model
+    model = MLP(input_size, 180, output_size)
+
+    # Define loss function and optimizer
     criterion = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
     # Train the model
-    train(model, train_data, optimizer, criterion, num_epochs=100)
+    num_epochs = 20
+    train_losses, test_losses = train_model(model, criterion, optimizer,
+                                            train_loader, test_loader,
+                                            num_epochs)
+
+    # Plot the training and test losses
+    plt.plot(train_losses, label='Train Loss')
+    plt.plot(test_losses, label='Test Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Training and Test Losses')
+    plt.legend()
+    plt.show()
 
 
 
