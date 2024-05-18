@@ -79,6 +79,9 @@ class SimpleNN(nn.Module):
         self.fc2 = nn.Linear(hidden_size, hidden_size)
         self.fc3 = nn.Linear(hidden_size, 1)
 
+        self.optim = torch.optim.Adam(self.parameters(), lr=0.01)
+        self.criterion = nn.BCELoss()
+
 
     def forward(self, x):
         x = functional.relu(self.fc1(x))
@@ -86,10 +89,26 @@ class SimpleNN(nn.Module):
         out = torch.sigmoid(self.fc3(x))
         return out
 
+    def train_model(self, data, y_true):
+        epoch = 41
+        losses = []
+        for i in range(epoch):
+            y_pred = model.forward(data)
+            loss = self.criterion(y_pred, y_true)
+            losses.append(loss)
+            if i % 10 == 0:
+                print(f"epoch {i}: Loss: {loss}")
+            self.optim.zero_grad()
+            loss.backward()
+            self.optim.step()
+
+    def test_model(self, test_data, y_test):
+        with torch.no_grad():
+            y_pred = self.forward(test_data)
+            return self.criterion(y_pred, y_test)
 
 
-def train_model():
-    model = SimpleNN(180, 180)
+def process_data():
     pos_path = "pos_A0201.txt"
     neg_path = "neg_A0201.txt"
     train_data_X, train_data_y, test_data_X, test_data_y = read_file(pos_path, neg_path)
@@ -97,22 +116,14 @@ def train_model():
     X_test = torch.FloatTensor(test_data_X)
     y_train = torch.FloatTensor(train_data_y)  # Assuming y_train is binary (0 or 1)
     y_test = torch.FloatTensor(test_data_y)  # Assuming y_test is binary (0 or 1)
-    criterion = nn.BCELoss()  # Binary Cross Entropy Loss
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-    epoch = 100
-    losses = []
-    for i in range(epoch):
-        y_pred = model.forward(X_train)
-        loss = criterion(y_pred, y_train)
-        losses.append(loss)
-        if i % 10 == 0:
-            print(f"epoch {i}: {loss}")
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+    return X_train, y_train, X_test, y_test
 
 
-train_model()
+if __name__ == '__main__':
+    X_train, y_train, X_test, y_test = process_data()
+    model = SimpleNN(180, 180)
+    model.train_model(X_train, y_train)
+    print(f" \n Error on test:{model.test_model(X_test, y_test)}")
 
 
 
