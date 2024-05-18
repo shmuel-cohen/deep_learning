@@ -83,36 +83,36 @@ class SimpleNN(nn.Module):
     def forward(self, x):
         x = functional.relu(self.fc1(x))
         x = functional.relu(self.fc2(x))
-        x = functional.softmax(self.fc3(x))
-        if x > 0.5:
-            return 1
-        else:
-            return 0
+        out = torch.sigmoid(self.fc3(x))
+        return out
 
 
 
-model = SimpleNN(180,180)
-pos_path = "pos_A0201.txt"
-neg_path = "neg_A0201.txt"
-train_data_X, train_data_y, test_data_X, test_data_y = read_file(pos_path, neg_path)
-X_train = torch.IntTensor(train_data_X)
-X_test = torch.IntTensor(test_data_X)
-y_train = torch.IntTensor(train_data_y)
-y_test = torch.IntTensor(test_data_y)
-criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr= 0.01)
+def train_model():
+    model = SimpleNN(180, 180)
+    pos_path = "pos_A0201.txt"
+    neg_path = "neg_A0201.txt"
+    train_data_X, train_data_y, test_data_X, test_data_y = read_file(pos_path, neg_path)
+    X_train = torch.FloatTensor(train_data_X)
+    X_test = torch.FloatTensor(test_data_X)
+    y_train = torch.FloatTensor(train_data_y)  # Assuming y_train is binary (0 or 1)
+    y_test = torch.FloatTensor(test_data_y)  # Assuming y_test is binary (0 or 1)
+    criterion = nn.BCELoss()  # Binary Cross Entropy Loss
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    epoch = 100
+    losses = []
+    for i in range(epoch):
+        y_pred = model.forward(X_train)
+        loss = criterion(y_pred, y_train)
+        losses.append(loss)
+        if i % 10 == 0:
+            print(f"epoch {i}: {loss}")
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
-epoch = 100
-losses = []
-for i in range(epoch):
-    y_pred = model.forward(X_train)
-    loss= criterion(y_pred, y_train)
-    losses.append(loss)
-    if i%10 == 0:
-        print(f"epoch {i}: {loss}")
-    optimizer.zero_grad()
-    loss.backwards()
-    optimizer.step()
+
+train_model()
 
 
 
