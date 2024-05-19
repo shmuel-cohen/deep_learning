@@ -1,53 +1,75 @@
 import random
+from typing import Tuple, Any
+
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
 AMINO_ACID_NUMBER = 20
 
+AMINO_ACID_DICT = {
+    "A": 0, "C": 1, "D": 2, "E": 3, "F": 4,
+    "G": 5, "H": 6, "I": 7, "K": 8, "L": 9,
+    "M": 10, "N": 11, "P": 12, "Q": 13, "R": 14,
+    "S": 15, "T": 16, "V": 17, "W": 18, "Y": 19
+}
 
-def read_file(pos_path: str, neg_path: str) -> tuple[list[str],list[str],list[str],list[str]]:
-    def read_data_from_file(file_name):
+class k_mer():
+    def __init__(self, k_size: int, seq: str, label : bool):
+        self.k = k_size
+        self.seq = seq
+        self.vector= convert_to_binary_vector(self)
+        self.label= label
+
+def read_file(pos_path: str, neg_path: str) -> tuple[Any, Any, Any, Any]:
+    def read_data_from_file(file_name, label, length = 9):
         try:
             with open(file_name, "r") as file:
                 lines = file.readlines()
                 lines = [line.strip() for line in lines if line.strip()]
-                return lines
+                k_mers = []
+                for line in lines:
+                    k_mers.append(k_mer(length, line, label))
+                return k_mers
+
         except Exception as e:
             print("An error occurred:", e)
             return []
 
+    def make_matrix(data):
+        return pd.DataFrame([peptide.vector for peptide in data]).values, pd.DataFrame([peptide.label for peptide in data]).values
+
     # Call the function to read data from file
-    pos_peptides = read_data_from_file(pos_path)
-    neg_peptides = read_data_from_file(neg_path)
+    pos_peptides = read_data_from_file(pos_path, 1)
+    neg_peptides = read_data_from_file(neg_path, 0)
 
     # Take 90% of the data randomly
-    pos_train_data = random.sample(pos_peptides,
-                                   k=int(len(pos_peptides) * 0.9))
-    neg_train_data = random.sample(neg_peptides,
-                                   k=int(len(neg_peptides) * 0.9))
+    train_data = random.sample(pos_peptides,
+                                   k=int(len(pos_peptides) * 0.9)) +\
+                 random.sample(neg_peptides, k=int(len(neg_peptides) * 0.9))
+    np.random.shuffle(train_data)
 
     # Get the remaining 10% of the data
-    pos_test_data = [peptide for peptide in pos_peptides if
-                     peptide not in pos_train_data]
-    neg_test_data = [peptide for peptide in neg_peptides if
-                     peptide not in neg_train_data]
-
-    return pos_train_data, neg_train_data, pos_test_data, neg_test_data
+    test_data = [peptide for peptide in pos_peptides if
+                     peptide not in train_data] + [peptide for peptide in neg_peptides if
+                     peptide not in train_data]
+    np.random.shuffle(test_data)
 
 
-def convert_to_binary_vector(peptides_list: list[str], amino_acid_dict: dict):
-    num_samples = len(peptides_list)
-    peptide_len = len(peptides_list[0])
-    input_size = len(peptides_list[0] * AMINO_ACID_NUMBER)
-    data = np.zeros(num_samples, input_size)
-    for i in range(num_samples):
-        for j in range(peptide_len):
-            data[j*AMINO_ACID_NUMBER + amino_acid_dict[peptides_list[j]], i] =1
-    return data
+    train_data_X, train_data_y = make_matrix(train_data)
+    test_data_X,  test_data_y = make_matrix(test_data)
+    return train_data_X, train_data_y, test_data_X,  test_data_y
 
+def convert_to_binary_vector(peptide: k_mer):
+    one_hot_code = np.zeros(shape = peptide.k*AMINO_ACID_NUMBER)
+    for i in range(peptide.k):
+        one_hot_code[i*AMINO_ACID_NUMBER + AMINO_ACID_DICT[peptide.seq[i]]] =1
+    return one_hot_code
 
 ### from gpt
 import torch
 import torch.nn as nn
+import torch.nn.functional as functional
 import torch.optim as optim
 
 # Define a simple neural network
@@ -55,135 +77,72 @@ class SimpleNN(nn.Module):
     def __init__(self, input_size, hidden_size):
         super(SimpleNN, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
-        self.relu = nn.ReLU()
         self.fc2 = nn.Linear(hidden_size, hidden_size)
         self.fc3 = nn.Linear(hidden_size, 1)
-        self.softmax = nn.Softmax()
+
+        self.optim = torch.optim.Adam(self.parameters(), lr=0.01)
+        self.criterion = nn.BCELoss()
 
 
     def forward(self, x):
-        out = self.fc1(x)
-        out = self.relu(out)
-        out = self.fc2(out)
-        out = self.relu(out)
-        out = self.fc3(out)
-        out = self.softmax(out)
+        x = functional.relu(self.fc1(x))
+        x = functional.relu(self.fc2(x))
+        out = torch.sigmoid(self.fc3(x))
         return out
 
-# Define training function
-def train_model(model, criterion, optimizer, train_loader, test_loader,
-                num_epochs):
-    train_losses = []
-    test_losses = []
-
-    for epoch in range(num_epochs):
-        model.train()
-        running_loss = 0.0
-        for inputs, targets in train_loader:
-            optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
+    def train_model(self, data, y_true, epoch :int, plot_data = None):
+        loss = None
+        for i in range(epoch):
+            y_pred = model.forward(data)
+            loss = self.criterion(y_pred, y_true)
+            # if i % 10 == 0:
+            #     print(f"epoch {i}: Loss: {loss}")
+            self.optim.zero_grad()
             loss.backward()
-            optimizer.step()
-            running_loss += loss.item()
+            self.optim.step()
+            if plot_data:
+                plot_data[0].append(loss.detach().cpu().numpy())
+                plot_data[1].append(model.test_model(X_test, y_test).detach().cpu().numpy())
+        return loss
 
-        train_loss = running_loss / len(train_loader)
-        train_losses.append(train_loss)
-
-        # Test the model
-        model.eval()
-        running_test_loss = 0.0
+    def test_model(self, test_data, y_test):
         with torch.no_grad():
-            for inputs, targets in test_loader:
-                outputs = model(inputs)
-                test_loss = criterion(outputs, targets)
-                running_test_loss += test_loss.item()
-
-        test_loss = running_test_loss / len(test_loader)
-        test_losses.append(test_loss)
-
-        print(
-            f'Epoch [{epoch + 1}/{num_epochs}], Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}')
-
-    return train_losses, test_losses
+            y_pred = self.forward(test_data)
+            return self.criterion(y_pred, y_test)
 
 
-def main():
+def process_data():
     pos_path = "pos_A0201.txt"
     neg_path = "neg_A0201.txt"
-    pos_train_data, neg_train_data, pos_test_data, neg_test_data = read_file(pos_path, neg_path)
-    amino_acid_dict = {
-        "A": 0, "C": 1, "D": 2, "E": 3, "F": 4,
-        "G": 5, "H": 6, "I": 7, "K": 8, "L": 9,
-        "M": 10, "N": 11, "P": 12, "Q": 13, "R": 14,
-        "S": 15, "T": 16, "V": 17, "W": 18, "Y": 19
-    }
-
-    # Assuming read_file function returns numpy arrays
-    pos_train_data, neg_train_data, pos_test_data, neg_test_data = read_file(
-        pos_path, neg_path)
-
-    # Concatenate positive and negative training data
-    X_train = np.concatenate((convert_to_binary_vector(pos_train_data, amino_acid_dict),
-                              convert_to_binary_vector(neg_train_data, amino_acid_dict)), axis=0)
-
-    # Create labels for training data
-    y_train_pos = np.ones((len(pos_train_data), 1))  # Positive class label
-    y_train_neg = np.zeros((len(neg_train_data), 1))  # Negative class label
-    y_train = np.concatenate((y_train_pos, y_train_neg), axis=0)
+    train_data_X, train_data_y, test_data_X, test_data_y = read_file(pos_path, neg_path)
+    X_train = torch.FloatTensor(train_data_X)
+    X_test = torch.FloatTensor(test_data_X)
+    y_train = torch.FloatTensor(train_data_y)  # Assuming y_train is binary (0 or 1)
+    y_test = torch.FloatTensor(test_data_y)  # Assuming y_test is binary (0 or 1)
+    return X_train, y_train, X_test, y_test
 
 
+if __name__ == '__main__':
+    X_train, y_train, X_test, y_test = process_data()
 
-    # Generate random data
-    num_samples = 1000
-    input_size = 180
-    output_size = 1
+    # epochs = range(1, 100, 10)  # Epochs from 0 to 20 with a step of 10
+    epochs = 100
+    model = SimpleNN(180, 180)
+    plot_data =  [[],[]]
+    model.train_model(X_train, y_train, epochs, plot_data)
+    # Convert lists to numpy arrays for plotting
+    train_loss = plot_data[0]
+    test_loss = plot_data[1]
 
-    X_train = np.random.randn(num_samples, input_size).astype(np.float32)
-    y_train = np.random.randint(2, size=(num_samples, output_size)).astype(
-        np.float32)
-
-    X_test = np.random.randn(num_samples // 2, input_size).astype(np.float32)
-    y_test = np.random.randint(2, size=(num_samples // 2, output_size)).astype(
-        np.float32)
-
-    # Convert numpy arrays to PyTorch tensors
-    X_train_tensor = torch.tensor(X_train)
-    y_train_tensor = torch.tensor(y_train)
-
-    X_test_tensor = torch.tensor(X_test)
-    y_test_tensor = torch.tensor(y_test)
-
-    # Create data loaders
-    train_dataset = torch.utils.data.TensorDataset(X_train_tensor,
-                                                   y_train_tensor)
-    test_dataset = torch.utils.data.TensorDataset(X_test_tensor, y_test_tensor)
-
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=32,
-                                               shuffle=True)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=32,
-                                              shuffle=False)
-
-    # Define the model
-    model = MLP(input_size, 180, output_size)
-
-    # Define loss function and optimizer
-    criterion = nn.BCELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
-    # Train the model
-    num_epochs = 20
-    train_losses, test_losses = train_model(model, criterion, optimizer,
-                                            train_loader, test_loader,
-                                            num_epochs)
-
-    # Plot the training and test losses
-    plt.plot(train_losses, label='Train Loss')
-    plt.plot(test_losses, label='Test Loss')
-    plt.xlabel('Epochs')
+    # Plotting the training and test losses
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(epochs), train_loss, label='Training Loss')
+    plt.plot(range(epochs), test_loss, label='Test Loss')
+    plt.xlabel('Epoch')
     plt.ylabel('Loss')
-    plt.title('Training and Test Losses')
+    plt.title('Training and Test Loss over Epochs')
     plt.legend()
+    plt.grid(True)
     plt.show()
 
 
