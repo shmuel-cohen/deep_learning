@@ -3,6 +3,7 @@ from typing import Tuple, Any
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 AMINO_ACID_NUMBER = 20
 
@@ -89,18 +90,20 @@ class SimpleNN(nn.Module):
         out = torch.sigmoid(self.fc3(x))
         return out
 
-    def train_model(self, data, y_true):
-        epoch = 41
-        losses = []
+    def train_model(self, data, y_true, epoch :int, plot_data = None):
+        loss = None
         for i in range(epoch):
             y_pred = model.forward(data)
             loss = self.criterion(y_pred, y_true)
-            losses.append(loss)
-            if i % 10 == 0:
-                print(f"epoch {i}: Loss: {loss}")
+            # if i % 10 == 0:
+            #     print(f"epoch {i}: Loss: {loss}")
             self.optim.zero_grad()
             loss.backward()
             self.optim.step()
+            if plot_data:
+                plot_data[0].append(loss.detach().cpu().numpy())
+                plot_data[1].append(model.test_model(X_test, y_test).detach().cpu().numpy())
+        return loss
 
     def test_model(self, test_data, y_test):
         with torch.no_grad():
@@ -121,9 +124,26 @@ def process_data():
 
 if __name__ == '__main__':
     X_train, y_train, X_test, y_test = process_data()
+
+    # epochs = range(1, 100, 10)  # Epochs from 0 to 20 with a step of 10
+    epochs = 100
     model = SimpleNN(180, 180)
-    model.train_model(X_train, y_train)
-    print(f" \n Error on test:{model.test_model(X_test, y_test)}")
+    plot_data =  [[],[]]
+    model.train_model(X_train, y_train, epochs, plot_data)
+    # Convert lists to numpy arrays for plotting
+    train_loss = plot_data[0]
+    test_loss = plot_data[1]
+
+    # Plotting the training and test losses
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(epochs), train_loss, label='Training Loss')
+    plt.plot(range(epochs), test_loss, label='Test Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training and Test Loss over Epochs')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
 
 
