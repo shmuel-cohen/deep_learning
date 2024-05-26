@@ -34,7 +34,7 @@ class peptide_detected():
     def __init__(self, path_to_pos_sample, path_to_neg_sample):
         self.simple_model = None
         self.advance_model = None
-        self.loss_date = [[], []]
+        self.loss_data = None
         self.X_train, self.y_train, self.X_test, self.y_test =\
             self.process_data(path_to_pos_sample,path_to_neg_sample)
 
@@ -63,60 +63,13 @@ class peptide_detected():
         # Take 90% of the data randomly
         train_data = random.sample(pos_peptides, k=int(len(pos_peptides) * 0.9)) +\
                      random.sample(neg_peptides, k=int(len(neg_peptides) * 0.9))
-        # np.random.shuffle(train_data) #todo why needed
 
         # Get the remaining 10% of the data
         test_data = [peptide for peptide in pos_peptides if peptide not in train_data] \
                     + [peptide for peptide in neg_peptides if peptide not in train_data]
-        # np.random.shuffle(test_data) #todo why needed
         train_data_X, train_data_y = make_matrix(train_data)
         test_data_X,  test_data_y = make_matrix(test_data)
         return train_data_X, train_data_y, test_data_X,  test_data_y
-
-
-
-# ### from gpt
-# import torch.nn as nn
-# import torch.nn.functional as functional
-# import torch.optim as optim
-#
-# # Define a simple neural network
-# class SimpleNN(nn.Module):
-#     def __init__(self, input_size, hidden_size):
-#         super(SimpleNN, self).__init__()
-#         self.fc1 = nn.Linear(input_size, hidden_size)
-#         self.fc2 = nn.Linear(hidden_size, hidden_size)
-#         self.fc3 = nn.Linear(hidden_size, 1)
-#
-#         self.optim = torch.optim.Adam(self.parameters(), lr=0.01)
-#         self.criterion = nn.BCELoss()
-#
-#
-#     def forward(self, x):
-#         x = functional.relu(self.fc1(x))
-#         x = functional.relu(self.fc2(x))
-#         out = torch.sigmoid(self.fc3(x))
-#         return out
-#
-#     def train_model(self, data, y_true, epoch :int, plot_data = None):
-#         loss = None
-#         for i in range(epoch):
-#             y_pred = self.forward(data)
-#             loss = self.criterion(y_pred, y_true)
-#             # if i % 10 == 0:
-#             #     print(f"epoch {i}: Loss: {loss}")
-#             self.optim.zero_grad()
-#             loss.backward()
-#             self.optim.step()
-#             if plot_data:
-#                 plot_data[0].append(loss.detach().cpu().numpy())
-#                 plot_data[1].append(self.test_model(X_test, y_test).detach().cpu().numpy())
-#         return loss
-#
-#     def test_model(self, test_data, y_test):
-#         with torch.no_grad():
-#             y_pred = self.forward(test_data)
-#             return self.criterion(y_pred, y_test)
 
 
     def process_data(self, pos_path, neg_path ):
@@ -135,11 +88,15 @@ class peptide_detected():
         if model == "SimpleNN":
             self.simple_model.train_model(self.X_train, self.y_train,
                                           self.X_test, self.y_test,
-                                          epoch, self.loss_date)
+                                          epoch, self.loss_data)
+
+    def test_model(self, model: str, threshold):
+        if model == "SimpleNN":
+            return self.simple_model.test_model(self.X_test, self.y_test, threshold)
 
     def plot_loss(self):
-        train_loss = self.loss_date[0]
-        test_loss = self.loss_date[1]
+        train_loss = self.loss_data[0]
+        test_loss = self.loss_data[1]
 
         # Plotting the training and test losses
         plt.figure(figsize=(10, 6))
@@ -152,13 +109,58 @@ class peptide_detected():
         plt.grid(True)
         plt.show()
 
+    def plot_roc_curve(self, fpr, tpr, roc_auc, thresholds):
+        plt.figure()
+        plt.plot(fpr, tpr, color='darkorange', lw=2,
+                 label='ROC curve (area = %0.2f)' % roc_auc)
+        plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+
+        # Adding threshold markers
+        for i, threshold in enumerate(np.arange(0.0, 1.1, 0.1)):
+            idx = np.argmin(np.abs(thresholds - threshold))
+            plt.scatter(fpr[idx], tpr[idx], marker='o', color='red')
+            plt.text(fpr[idx], tpr[idx], f'{threshold:.2f}', fontsize=9,
+                     ha='right')
+
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.05])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver Operating Characteristic')
+        plt.legend(loc="lower right")
+        plt.show()
+
+        # plt.figure()
+        # plt.plot(fpr, tpr, color='darkorange', lw=2,
+        #          label='ROC curve (area = %0.2f)' % roc_auc)
+        # plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+        # plt.xlim([0.0, 1.0])
+        # plt.ylim([0.0, 1.05])
+        # plt.xlabel('False Positive Rate')
+        # plt.ylabel('True Positive Rate')
+        # plt.title('Receiver Operating Characteristic')
+        # plt.legend(loc="lower right")
+        # plt.show()
+
+
 if __name__ == '__main__':
     pos_path = "pos_A0201.txt"
     neg_path = "neg_A0201.txt"
     p_detected = peptide_detected(pos_path, neg_path)
+    #p_detected.loss_data =  [[], []]
     p_detected.create_model("SimpleNN")
-    p_detected.train_model("SimpleNN", 100)
-    p_detected.plot_loss()
+    p_detected.train_model("SimpleNN", 30)
+    #p_detected.plot_loss()
+
+    # fpr, tpr, thresholds, roc_auc = p_detected.test_model("SimpleNN")
+    # p_detected.plot_roc_curve(fpr, tpr, roc_auc, thresholds)
+
+    fpn, fnn, numer_of_pos, numer_of_neg, acc  = p_detected.test_model("SimpleNN", 0.1)
+
+    print (f'from numer_of_pos- {numer_of_pos} wrong on {fpn} \n'
+           f' from numer_of_neg{numer_of_neg} right on {fnn}\n'
+           f'ccurachy = {acc}')
+    # print(f'Threshold: {thresholds}, FPR: {fpr}, TPR: {tpr}, ')
     # epochs = range(1, 100, 10)  # Epochs from 0 to 20 with a step of 10
     # epochs = 100
     # model = SimpleNN(180, 180)
