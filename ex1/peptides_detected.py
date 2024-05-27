@@ -32,11 +32,15 @@ class k_mer():
 
 class peptide_detected():
     def __init__(self, path_to_pos_sample, path_to_neg_sample):
+        self.models = {}
         self.simple_model = None
         self.advance_model = None
         self.loss_data = None
         self.X_train, self.y_train, self.X_test, self.y_test =\
             self.process_data(path_to_pos_sample,path_to_neg_sample)
+        all_samples = (self.y_train == 1).sum().item() + (self.y_train == 0).sum().item()
+        self.weight_fn = (self.y_train == 1).sum().item() / all_samples
+        self.weight_fp = (self.y_train == 0).sum().item() / all_samples
 
     def read_file(self, pos_path: str, neg_path: str) -> tuple[Any, Any, Any, Any]:
         def read_data_from_file(file_name, label, length=9):
@@ -80,21 +84,28 @@ class peptide_detected():
         y_test = torch.FloatTensor(test_data_y)  # Assuming y_test is binary (0 or 1)
         return X_train, y_train, X_test, y_test
 
-    def create_model(self, model:str ):
+    def create_model(self, model:str):
         if model == "SimpleNN":
-            self.simple_model = snn.SimpleNN(180, 180)
+            self.models["SimpleNN"] = snn.SimpleNN(input_size=180, hidden_size_1=180,hidden_size_2=180, weight_fn=self.weight_fn, weight_fp=self.weight_fp)
+            # self.simple_model = snn.SimpleNN(180, 180, weight_fn=self.weight_fn, weight_fp=self.weight_fp)
+        if model == "advance_model":
+            # self.advance_model = snn.SimpleNN(180, 9, weight_fn=self.weight_fn, weight_fp=self.weight_fp)
+            self.models["advance_model"] = snn.SimpleNN(input_size=180,hidden_size_1=20, hidden_size_2=9, weight_fn=self.weight_fn, weight_fp=self.weight_fp)
+
 
     def train_model(self, model:str, epoch:int):
-        if model == "SimpleNN":
-            self.simple_model.train_model(self.X_train, self.y_train,
+        self.models[model].train_model(self.X_train, self.y_train,
                                           self.X_test, self.y_test,
                                           epoch, self.loss_data)
 
-    def test_model(self, model: str, threshold):
-        if model == "SimpleNN":
-            return self.simple_model.test_model(self.X_test, self.y_test, threshold)
 
-    def plot_loss(self):
+    def test_model(self, model: str, threshold, insert_train:bool = False):
+        if insert_train:
+            return self.models[model].test_model(self.X_train, self.y_train,
+                                                 threshold)
+        return self.models[model].test_model(self.X_test, self.y_test, threshold)
+
+    def plot_loss(self, model):
         train_loss = self.loss_data[0]
         test_loss = self.loss_data[1]
 
@@ -104,12 +115,13 @@ class peptide_detected():
         plt.plot(range(len(test_loss)), test_loss, label='Test Loss')
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
-        plt.title('Training and Test Loss over Epochs')
+        plt.title(f'Training and Test Loss over Epochs- {model}')
         plt.legend()
         plt.grid(True)
-        plt.show()
+        plt.savefig(f"./plots/Training and Test Loss over Epochs- {model}.png")
 
-    def plot_roc_curve(self, fpr, tpr, roc_auc, thresholds):
+    def plot_roc_curve(self, model):
+        fpr, tpr, thresholds, roc_auc = self.models[model].roc_carve(self.X_test, self.y_test)
         plt.figure()
         plt.plot(fpr, tpr, color='darkorange', lw=2,
                  label='ROC curve (area = %0.2f)' % roc_auc)
@@ -130,56 +142,86 @@ class peptide_detected():
         plt.legend(loc="lower right")
         plt.show()
 
-        # plt.figure()
-        # plt.plot(fpr, tpr, color='darkorange', lw=2,
-        #          label='ROC curve (area = %0.2f)' % roc_auc)
-        # plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-        # plt.xlim([0.0, 1.0])
-        # plt.ylim([0.0, 1.05])
-        # plt.xlabel('False Positive Rate')
-        # plt.ylabel('True Positive Rate')
-        # plt.title('Receiver Operating Characteristic')
-        # plt.legend(loc="lower right")
-        # plt.show()
-
 
 if __name__ == '__main__':
     pos_path = "pos_A0201.txt"
     neg_path = "neg_A0201.txt"
-    p_detected = peptide_detected(pos_path, neg_path)
-    #p_detected.loss_data =  [[], []]
-    p_detected.create_model("SimpleNN")
-    p_detected.train_model("SimpleNN", 30)
-    #p_detected.plot_loss()
+    # p_detected = peptide_detected(pos_path, neg_path)
+    for model, n_epoch in zip(["SimpleNN", "advance_model"], [30, 40]):
+        p_detected = peptide_detected(pos_path, neg_path)
+        p_detected.loss_data = [[], []]
+        p_detected.create_model(model)
+        p_detected.train_model(model, 100)
+        p_detected.plot_loss(model)
+        p_detected = peptide_detected(pos_path, neg_path)
+        p_detected.create_model(model)
+        p_detected.train_model(model, n_epoch)
+        max_acc = 0
+        T = 0
+        acc_l = []
+        T_l = []
+        for t in np.linspace(0.1, 1.0, 150):
+            tn, fp, fn, tp, acc = p_detected.test_model(model, t, insert_train=True)
+            acc_l.append(acc)
+            T_l.append(t)
+            # print(f't = {t}. accurachy = {acc}')
+            if acc > max_acc:
+                max_acc = acc
+                T = t
+        print(f'########  for model {model} with {n_epoch} epoch and T = {T}  #######')
+        tn, fp, fn, tp, acc = p_detected.test_model(model, T)
 
-    # fpr, tpr, thresholds, roc_auc = p_detected.test_model("SimpleNN")
-    # p_detected.plot_roc_curve(fpr, tpr, roc_auc, thresholds)
+        print(f'from numer_of_pos: {tp + fn} wrong on {fn} \n'
+              f'from numer_of_neg: {tn + fp} wrong on {fp}\n'
+              f'accurachy = {acc}')
 
-    fpn, fnn, numer_of_pos, numer_of_neg, acc  = p_detected.test_model("SimpleNN", 0.1)
-
-    print (f'from numer_of_pos- {numer_of_pos} wrong on {fpn} \n'
-           f' from numer_of_neg{numer_of_neg} right on {fnn}\n'
-           f'ccurachy = {acc}')
-    # print(f'Threshold: {thresholds}, FPR: {fpr}, TPR: {tpr}, ')
-    # epochs = range(1, 100, 10)  # Epochs from 0 to 20 with a step of 10
-    # epochs = 100
-    # model = SimpleNN(180, 180)
-    # plot_data =  [[],[]]
-    # model.train_model(X_train, y_train, epochs, plot_data)
-    # # Convert lists to numpy arrays for plotting
-    # train_loss = plot_data[0]
-    # test_loss = plot_data[1]
+    # p_detected.loss_data = [[], []]
+    # p_detected.create_model("SimpleNN")
+    # p_detected.train_model("SimpleNN", 30)
+    # p_detected.plot_loss("SimpleNN")
     #
-    # # Plotting the training and test losses
+    #
+    # p_detected.plot_roc_curve()
+    #
+    # tn, fp, fn, tp, acc = p_detected.test_model("SimpleNN", 0.5)
+    #
+    # print (f'from numer_of_pos: {tp + fn} wrong on {fn} \n'
+    #        f'from numer_of_neg: {tn + fp} wrong on {fp}\n'
+    #        f'ccurachy = {acc}')
+    #
+    # print("####################################################################")
+    #
+    # p_detected.create_model("advance_model")
+    # p_detected.train_model("advance_model", 40)
+    # p_detected.plot_loss("advance_model")
+    # max_acc = 0
+    # T = 0
+    # acc_l = []
+    # T_l = []
+    # for t in np.linspace(0.1, 1.0, 150):
+    #     tn, fp, fn, tp, acc = p_detected.test_model("advance_model", t, insert_train=True)
+    #     acc_l.append(acc)
+    #     T_l.append(t)
+    #     print(f't = {t}. accurachy = {acc}')
+    #     if acc > max_acc:
+    #         max_acc = acc
+    #         T=t
+
+    # Plotting the graph of threshold vs accuracy
     # plt.figure(figsize=(10, 6))
-    # plt.plot(range(epochs), train_loss, label='Training Loss')
-    # plt.plot(range(epochs), test_loss, label='Test Loss')
-    # plt.xlabel('Epoch')
-    # plt.ylabel('Loss')
-    # plt.title('Training and Test Loss over Epochs')
-    # plt.legend()
+    # plt.plot(T_l, acc_l, marker='o')
+    # plt.title('Threshold vs Accuracy')
+    # plt.xlabel('Threshold (t)')
+    # plt.ylabel('Accuracy')
     # plt.grid(True)
     # plt.show()
+
+    # print(f'T = {T}')
+    # tn, fp, fn, tp, acc = p_detected.test_model("advance_model", T)
+    #
+    # print (f'from numer_of_pos: {tp + fn} wrong on {fn} \n'
+    #        f'from numer_of_neg: {tn + fp} wrong on {fp}\n'
+    #        f'accurachy = {acc}')
 
 
 
