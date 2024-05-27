@@ -19,7 +19,7 @@ AMINO_ACID_DICT = {
 }
 
 
-class k_mer():
+class K_mer():
     """
     Class representing a k-mer sequence.
 
@@ -30,7 +30,7 @@ class k_mer():
         label (bool): Label indicating positive (True) or negative (False).
     """
 
-    def __init__(self, k_size: int, seq: str, label: bool):
+    def __init__(self, k_size: int, seq: str, label: int =None):
         """
         Initialize a k-mer instance.
 
@@ -92,6 +92,8 @@ class peptide_detected():
         self.weight_fp = (self.y_train == 0).sum().item() / all_samples
         self.threshold= 0.5
 
+
+
     def read_file(self, pos_path: str, neg_path: str) -> Tuple[np.array, np.array, np.array, np.array]:
         """
         Read peptide data from files and process them.
@@ -122,7 +124,7 @@ class peptide_detected():
                     lines = [line.strip() for line in lines if line.strip()]
                     k_mers = []
                     for line in lines:
-                        k_mers.append(k_mer(length, line, label))
+                        k_mers.append(K_mer(length, line, label))
                     return k_mers
 
             except Exception as e:
@@ -369,6 +371,11 @@ def make_models():
                 name = input("select model file name:")
                 torch.save(detector.models['linear_model'], f"saved_models/linear_model_{name}.pth")
             try_again = ask_for_another_try()
+    input_user = input("Check models on Corona? (y/n)")
+
+    if input_user == 'y':
+        for model in detector.models.keys():
+            detect(CORONA_SEQ, detector.models[model])
 
 def ask_for_another_try():
     """
@@ -412,6 +419,22 @@ def select_threshold(detector: peptide_detected, model):
     print(f'Total number of positive samples: {tp + fn}, number of false negative mistakes {fn} \n'
           f'Total number of negative samples: {tn + fp} , number of true negative mistakes {fp}\n'
           f'accuracy = {acc}')
+
+CORONA_SEQ = "spike.txt"
+def detect(seq_path: str, model: snn.SimpleNN):
+    with open(seq_path) as f:
+       seq = f.read().replace('\n', "")
+    top_3 = [0, 0 ,0]
+    top_3_seq = ["","",""]
+    for i in range(len(seq)-9):
+        k_mer = K_mer(9, seq[i:i+9])
+        y_pred = float(model(torch.FloatTensor(k_mer.vector)))
+        if y_pred > min(top_3):
+            i = np.argmin(top_3)
+            top_3[i] = y_pred
+            top_3_seq[i] = k_mer.seq
+    print(top_3_seq, top_3)
+
 
 
 if __name__ == '__main__':
