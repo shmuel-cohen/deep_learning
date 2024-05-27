@@ -9,6 +9,8 @@ import SimpleNN as snn
 
 AMINO_ACID_NUMBER = 20
 
+POS_PATH = "pos_A0201.txt"
+NEG_PATH = "neg_A0201.txt"
 AMINO_ACID_DICT = {
     "A": 0, "C": 1, "D": 2, "E": 3, "F": 4,
     "G": 5, "H": 6, "I": 7, "K": 8, "L": 9,
@@ -30,13 +32,14 @@ class k_mer():
             one_hot_code[i*AMINO_ACID_NUMBER + AMINO_ACID_DICT[self.seq[i]]] =1
         return one_hot_code
 
+
 class peptide_detected():
     def __init__(self, path_to_pos_sample, path_to_neg_sample):
         self.models = {}
         self.simple_model = None
         self.advance_model = None
         self.loss_data = None
-        self.X_train, self.y_train, self.X_test, self.y_test =\
+        self.X_train, self.y_train, self.X_test, self.y_test = \
             self.process_data(path_to_pos_sample,path_to_neg_sample)
         all_samples = (self.y_train == 1).sum().item() + (self.y_train == 0).sum().item()
         self.weight_fn = (self.y_train == 1).sum().item() / all_samples
@@ -65,7 +68,7 @@ class peptide_detected():
         neg_peptides = read_data_from_file(neg_path, 0)
 
         # Take 90% of the data randomly
-        train_data = random.sample(pos_peptides, k=int(len(pos_peptides) * 0.9)) +\
+        train_data = random.sample(pos_peptides, k=int(len(pos_peptides) * 0.9)) + \
                      random.sample(neg_peptides, k=int(len(neg_peptides) * 0.9))
 
         # Get the remaining 10% of the data
@@ -84,19 +87,18 @@ class peptide_detected():
         y_test = torch.FloatTensor(test_data_y)  # Assuming y_test is binary (0 or 1)
         return X_train, y_train, X_test, y_test
 
-    def create_model(self, model:str):
+    def create_model(self, model:str, layer_1= None, layer_2= None ,linear = False):
         if model == "SimpleNN":
             self.models["SimpleNN"] = snn.SimpleNN(input_size=180, hidden_size_1=180,hidden_size_2=180, weight_fn=self.weight_fn, weight_fp=self.weight_fp)
-            # self.simple_model = snn.SimpleNN(180, 180, weight_fn=self.weight_fn, weight_fp=self.weight_fp)
         if model == "advance_model":
-            # self.advance_model = snn.SimpleNN(180, 9, weight_fn=self.weight_fn, weight_fp=self.weight_fp)
-            self.models["advance_model"] = snn.SimpleNN(input_size=180,hidden_size_1=20, hidden_size_2=9, weight_fn=self.weight_fn, weight_fp=self.weight_fp)
-
+            self.models["advance_model"] = snn.SimpleNN(input_size=180,hidden_size_1=layer_1, hidden_size_2=layer_2, weight_fn=self.weight_fn, weight_fp=self.weight_fp)
+        if model == "linear_model":
+            self.models["linear_model"] = snn.SimpleNN(input_size=180,hidden_size_1=layer_1, hidden_size_2=layer_2, weight_fn=self.weight_fn, weight_fp=self.weight_fp)
 
     def train_model(self, model:str, epoch:int):
         self.models[model].train_model(self.X_train, self.y_train,
-                                          self.X_test, self.y_test,
-                                          epoch, self.loss_data)
+                                       self.X_test, self.y_test,
+                                       epoch, self.loss_data)
 
 
     def test_model(self, model: str, threshold, insert_train:bool = False):
@@ -109,16 +111,24 @@ class peptide_detected():
         train_loss = self.loss_data[0]
         test_loss = self.loss_data[1]
 
-        # Plotting the training and test losses
-        plt.figure(figsize=(10, 6))
-        plt.plot(range(len(train_loss)), train_loss, label='Training Loss')
-        plt.plot(range(len(test_loss)), test_loss, label='Test Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.title(f'Training and Test Loss over Epochs- {model}')
-        plt.legend()
-        plt.grid(True)
-        plt.savefig(f"./plots/Training and Test Loss over Epochs- {model}.png")
+        # Create the figure and axis objects explicitly
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(range(len(train_loss)), train_loss, label='Training Loss')
+        ax.plot(range(len(test_loss)), test_loss, label='Test Loss')
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Loss')
+        ax.set_title(f'Training and Test Loss over Epochs - {model}')
+        ax.legend()
+        ax.grid(True)
+
+        # Show the plot
+        plt.show()
+
+        # Prompt user to save the plot
+        save = input("Save plot? (y/n): ")
+        if save.lower() == 'y':
+            name = input("Add plot name: ")
+            fig.savefig(f"./plots/{name} - {model}.png")
 
     def plot_roc_curve(self, model):
         fpr, tpr, thresholds, roc_auc = self.models[model].roc_carve(self.X_test, self.y_test)
@@ -143,37 +153,119 @@ class peptide_detected():
         plt.show()
 
 
-if __name__ == '__main__':
-    pos_path = "pos_A0201.txt"
-    neg_path = "neg_A0201.txt"
-    # p_detected = peptide_detected(pos_path, neg_path)
-    for model, n_epoch in zip(["SimpleNN", "advance_model"], [30, 40]):
-        p_detected = peptide_detected(pos_path, neg_path)
-        p_detected.loss_data = [[], []]
-        p_detected.create_model(model)
-        p_detected.train_model(model, 100)
-        p_detected.plot_loss(model)
-        p_detected = peptide_detected(pos_path, neg_path)
-        p_detected.create_model(model)
-        p_detected.train_model(model, n_epoch)
-        max_acc = 0
-        T = 0
-        acc_l = []
-        T_l = []
-        for t in np.linspace(0.1, 1.0, 150):
-            tn, fp, fn, tp, acc = p_detected.test_model(model, t, insert_train=True)
-            acc_l.append(acc)
-            T_l.append(t)
-            # print(f't = {t}. accurachy = {acc}')
-            if acc > max_acc:
-                max_acc = acc
-                T = t
-        print(f'########  for model {model} with {n_epoch} epoch and T = {T}  #######')
-        tn, fp, fn, tp, acc = p_detected.test_model(model, T)
+def make_models():
+    try_again = True
+    detector = None
+    user_in = input("Do you want to train a new 180_model? (y/n)")
+    if user_in == "y":
+        while (try_again):
+            if not detector:
+                detector = peptide_detected(POS_PATH, NEG_PATH)
+            detector.loss_data = [[], []]
+            detector.create_model("SimpleNN")
+            n_epoch: int = int(input("insert number of epochs? (int)"))
+            detector.train_model("SimpleNN", n_epoch)
+            select_threshold(detector, "SimpleNN")
+            user_in = input("plot loss? (y/n)")
+            if user_in == "y":
 
-        print(f'from numer_of_pos: {tp + fn} wrong on {fn} \n'
-              f'from numer_of_neg: {tn + fp} wrong on {fp}\n'
-              f'accurachy = {acc}')
+                detector.plot_loss("SimpleNN")
+
+            user_in = input("save model? (y/n)")
+            if user_in == "y":
+                name = input("select model file name:")
+                torch.save(detector.models['SimpleNN'], f"./saved_models/SimpleNN_{name}.pth")
+
+            try_again = ask_for_another_try()
+
+    try_again = True
+
+    user_in = input("Do you want to train a new modular layers model? (y/n)")
+    if user_in == "y":
+        while (try_again):
+            if not detector:
+                detector = peptide_detected(POS_PATH, NEG_PATH)
+            detector.loss_data = [[], []]
+            layer_1 = int(input("how many nodes in layer 1?"))
+            layer_2 = int(input("how many nodes in layer 2?"))
+            detector.create_model("advance_model", layer_1= layer_1, layer_2= layer_2)
+            n_epoch: int = int(input("insert number of epochs? (int)"))
+            detector.train_model("advance_model", n_epoch)
+            select_threshold(detector, "advance_model")
+            user_in = input("plot loss? (y/n)")
+            if user_in == "y":
+                detector.plot_loss("advance_model")
+
+            user_in = input("save model? (y/n)")
+            if user_in == "y":
+                name = input("select model file name:")
+                torch.save(detector.models["advance_model"], f"saved_models/advanced_model_{name}.pth")
+            try_again = ask_for_another_try()
+
+    try_again = True
+    user_in = input("Do you want to train a linear model? (y/n)")
+    if user_in == "y":
+        while (try_again):
+            if not detector:
+                detector = peptide_detected(POS_PATH, NEG_PATH)
+            detector.loss_data = [[], []]
+            layer_1 = int(input("how many nodes in layer 1?"))
+            layer_2 = int(input("how many nodes in layer 2?"))
+            detector.create_model("linear_model", layer_1=layer_1, layer_2=layer_2)
+            n_epoch: int = int(input("insert number of epochs? (int)"))
+            detector.train_model("linear_model", n_epoch)
+            select_threshold(detector, "linear_model")
+            user_in = input("plot loss? (y/n)")
+            if user_in == "y":
+                detector.plot_loss("advance_model")
+
+            user_in = input("save model? (y/n)")
+            if user_in == "y":
+                name = input("select model file name:")
+                torch.save(detector.models['linear_model'], f"saved_models/linear_model_{name}.pth")
+            try_again = ask_for_another_try()
+
+def ask_for_another_try():
+    try_again = input("Another try? (y/n)")
+    if try_again == 'y':
+        try_again = True
+    else:
+        try_again = False
+    return try_again
+
+def select_threshold(detector: peptide_detected, model):
+    max_acc = 0
+    T = 0
+    acc_l = []
+    T_l = []
+    for t in np.linspace(0.1, 1.0, 150):
+        tn, fp, fn, tp, acc = detector.test_model(model, t, insert_train=True)
+        acc_l.append(acc)
+        T_l.append(t)
+        # print(f't = {t}. accurachy = {acc}')
+        if acc > max_acc:
+            max_acc = acc
+            T = t
+    # print(f'########  for model {model} with {n_epoch} epoch and T = {T}  #######')
+    tn, fp, fn, tp, acc = detector.test_model(model, T)
+    print(f'Total number of positive samples: {tp + fn}, number of false negative mistakes {fn} \n'
+          f'Total number of negative samples: {tn + fp} , number of true negative mistakes {fp}\n'
+          f'accuracy = {acc}')
+
+
+if __name__ == '__main__':
+    make_models()
+    # p_detected = peptide_detected(pos_path, neg_path)
+    # for model, n_epoch in zip(["SimpleNN", "advance_model"], [30, 40]):
+    #     p_detected = peptide_detected(POS_PATH, NEG_PATH)
+    #     p_detected.loss_data = [[], []]
+    #     p_detected.create_model(model)
+    #     p_detected.train_model(model, 100)
+    #     p_detected.plot_loss(model)
+    #     # p_detected = peptide_detected(POS_PATH, NEG_PATH)
+    #     # p_detected.create_model(model)
+    #     # p_detected.train_model(model, n_epoch)
+    #     select_threshold(p_detected)
 
     # p_detected.loss_data = [[], []]
     # p_detected.create_model("SimpleNN")

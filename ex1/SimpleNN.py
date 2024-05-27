@@ -11,8 +11,9 @@ import torch.optim as optim
 
 # Define a simple neural network
 class SimpleNN(nn.Module):
-    def __init__(self, input_size, hidden_size_1, hidden_size_2, weight_fn, weight_fp):
+    def __init__(self, input_size, hidden_size_1, hidden_size_2, weight_fn, weight_fp, linear= False):
         super(SimpleNN, self).__init__()
+        self.linear= linear
         self.fc1 = nn.Linear(input_size, hidden_size_1)
         self.fc2 = nn.Linear(hidden_size_1, hidden_size_2)
         self.fc3 = nn.Linear(hidden_size_2, 1)
@@ -25,8 +26,12 @@ class SimpleNN(nn.Module):
 
     def forward(self, x):
         # return self.fc3(self.fc2(self.fc1(x)))
-        x = functional.relu(self.fc1(x))
-        x = functional.relu(self.fc2(x))
+        if self.linear:
+            f = lambda x: x
+        else:
+            f = functional.relu
+        x = f(self.fc1(x))
+        x = f(self.fc2(x))
         out = torch.tanh_(self.fc3(x)) #- 0.5
         return out
 
