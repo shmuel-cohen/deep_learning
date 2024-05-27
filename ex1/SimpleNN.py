@@ -11,6 +11,17 @@ import torch.optim as optim
 
 # Define a simple neural network
 class SimpleNN(nn.Module):
+    """
+    Defines a simple neural network model for binary classification.
+
+    Parameters:
+        input_size (int): The number of input features.
+        hidden_size_1 (int): The number of neurons in the first hidden layer.
+        hidden_size_2 (int): The number of neurons in the second hidden layer.
+        weight_fn (float): Weight for false negatives.
+        weight_fp (float): Weight for false positives.
+        linear (bool, optional): Flag to indicate whether to use a linear activation function (default is False).
+    """
     def __init__(self, input_size, hidden_size_1, hidden_size_2, weight_fn, weight_fp, linear= False):
         super(SimpleNN, self).__init__()
         self.linear= linear
@@ -25,6 +36,15 @@ class SimpleNN(nn.Module):
 
 
     def forward(self, x):
+        """
+        Defines the forward pass of the neural network.
+
+        Parameters:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Output tensor.
+        """
         # return self.fc3(self.fc2(self.fc1(x)))
         if self.linear:
             f = lambda x: x
@@ -36,6 +56,20 @@ class SimpleNN(nn.Module):
         return out
 
     def train_model(self, X_train,  y_train, X_test, y_test, epoch :int, plot_data = None):
+        """
+        Trains the model.
+
+        Parameters:
+            X_train (torch.Tensor): Input training data.
+            y_train (torch.Tensor): Target training data.
+            X_test (torch.Tensor): Input test data.
+            y_test (torch.Tensor): Target test data.
+            epoch (int): Number of epochs to train.
+            plot_data (list, optional): Data for plotting loss.
+
+        Returns:
+            torch.Tensor: Loss value.
+        """
         loss = None
         for i in range(epoch):
             y_pred = self.forward(X_train)
@@ -49,11 +83,31 @@ class SimpleNN(nn.Module):
         return loss
 
     def find_loss(self, test_data, y_test):
+        """
+          Computes the loss on test data.
+
+          Parameters:
+              test_data (torch.Tensor): Input test data.
+              y_test (torch.Tensor): Target test data.
+
+          Returns:
+              torch.Tensor: Loss value.
+          """
         with torch.no_grad():
             y_pred = self.forward(test_data)
             return self.criterion(y_pred, y_test)
 
     def roc_carve(self, test_data, y_test):
+        """
+           Computes ROC curve and AUC.
+
+           Parameters:
+               test_data (torch.Tensor): Input test data.
+               y_test (torch.Tensor): Target test data.
+
+           Returns:
+               tuple: Tuple containing FPR, TPR, thresholds, and ROC AUC.
+           """
         with torch.no_grad():
             y_pred = self.forward(test_data)  # Get the raw model outputs (logits or probabilities)
 
@@ -65,6 +119,17 @@ class SimpleNN(nn.Module):
 
         return fpr, tpr, thresholds, roc_auc
     def test_model(self, test_data, y_test, threshold):
+        """
+               Tests the model on test data using a specified threshold.
+
+               Parameters:
+                   test_data (torch.Tensor): Input test data.
+                   y_test (torch.Tensor): Target test data.
+                   threshold (float): Threshold value for classification.
+
+               Returns:
+                   tuple: Tuple containing true negatives, false positives, false negatives, true positives, and accuracy.
+               """
         with torch.no_grad():
             y_test = y_test.flatten()
             y_pred = self.forward(test_data)

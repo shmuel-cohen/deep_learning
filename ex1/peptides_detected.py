@@ -20,33 +20,102 @@ AMINO_ACID_DICT = {
 
 
 class k_mer():
+    """
+    Class representing a k-mer sequence.
+
+    Attributes:
+        k (int): Length of the k-mer.
+        seq (str): Sequence of amino acids.
+        vector (np.array): Binary vector representation of the k-mer.
+        label (bool): Label indicating positive (True) or negative (False).
+    """
+
     def __init__(self, k_size: int, seq: str, label: bool):
+        """
+        Initialize a k-mer instance.
+
+        Args:
+            k_size (int): Length of the k-mer.
+            seq (str): Sequence of amino acids.
+            label (bool): Label indicating positive (True) or negative (False).
+        """
         self.k = k_size
         self.seq = seq
         self.vector = self.convert_to_binary_vector()
         self.label = label
 
     def convert_to_binary_vector(self):
-        one_hot_code = np.zeros(shape=self.k*AMINO_ACID_NUMBER)
+        """
+        Convert the k-mer sequence to a binary vector representation.
+
+        Returns:
+            np.array: Binary vector representation of the k-mer.
+        """
+        one_hot_code = np.zeros(shape=self.k * AMINO_ACID_NUMBER)
         for i in range(self.k):
-            one_hot_code[i*AMINO_ACID_NUMBER + AMINO_ACID_DICT[self.seq[i]]] =1
+            one_hot_code[i * AMINO_ACID_NUMBER + AMINO_ACID_DICT[self.seq[i]]] = 1
         return one_hot_code
 
-
 class peptide_detected():
+    """
+    Class for peptide detection.
+
+    Attributes:
+        models (dict): Dictionary to store trained models.
+        simple_model (object): Simple neural network model.
+        advance_model (object): Advanced neural network model.
+        loss_data (list): List to store training and test loss data.
+        X_train (torch.Tensor): Training data features.
+        y_train (torch.Tensor): Training data labels.
+        X_test (torch.Tensor): Test data features.
+        y_test (torch.Tensor): Test data labels.
+        weight_fn (float): Weight for positive samples in loss function.
+        weight_fp (float): Weight for negative samples in loss function.
+    """
+
     def __init__(self, path_to_pos_sample, path_to_neg_sample):
+        """
+        Initialize the peptide detector.
+
+        Args:
+            path_to_pos_sample (str): Path to file containing positive samples.
+            path_to_neg_sample (str): Path to file containing negative samples.
+        """
         self.models = {}
         self.simple_model = None
         self.advance_model = None
         self.loss_data = None
         self.X_train, self.y_train, self.X_test, self.y_test = \
-            self.process_data(path_to_pos_sample,path_to_neg_sample)
+            self.process_data(path_to_pos_sample, path_to_neg_sample)
         all_samples = (self.y_train == 1).sum().item() + (self.y_train == 0).sum().item()
         self.weight_fn = (self.y_train == 1).sum().item() / all_samples
         self.weight_fp = (self.y_train == 0).sum().item() / all_samples
+        self.threshold= 0.5
 
-    def read_file(self, pos_path: str, neg_path: str) -> tuple[Any, Any, Any, Any]:
+    def read_file(self, pos_path: str, neg_path: str) -> Tuple[np.array, np.array, np.array, np.array]:
+        """
+        Read peptide data from files and process them.
+
+        Args:
+            pos_path (str): Path to file containing positive samples.
+            neg_path (str): Path to file containing negative samples.
+
+        Returns:
+            Tuple: Tuple containing training and test data features and labels.
+        """
+
         def read_data_from_file(file_name, label, length=9):
+            """
+            Read data from a file and create k-mer instances.
+
+            Args:
+                file_name (str): Name of the file.
+                label (int): Label for the samples (0 for negative, 1 for positive).
+                length (int): Length of k-mer.
+
+            Returns:
+                List: List of k-mer instances.
+            """
             try:
                 with open(file_name, "r") as file:
                     lines = file.readlines()
@@ -61,6 +130,15 @@ class peptide_detected():
                 raise Exception(e)
 
         def make_matrix(data):
+            """
+                        Create feature and label matrices from k-mer instances.
+
+                        Args:
+                            data (List): List of k-mer instances.
+
+                        Returns:
+                            Tuple: Tuple containing feature and label matrices.
+                        """
             return pd.DataFrame([peptide.vector for peptide in data]).values, pd.DataFrame([peptide.label for peptide in data]).values
 
         # Call the function to read data from file
@@ -80,6 +158,16 @@ class peptide_detected():
 
 
     def process_data(self, pos_path, neg_path ):
+        """
+        Process the peptide data from the given paths.
+
+        Args:
+            pos_path (str): Path to file containing positive samples.
+            neg_path (str): Path to file containing negative samples.
+
+        Returns:
+            Tuple: A tuple containing torch.FloatTensor of training and test data features and labels.
+        """
         train_data_X, train_data_y, test_data_X, test_data_y = self.read_file(pos_path, neg_path)
         X_train = torch.FloatTensor(train_data_X)
         X_test = torch.FloatTensor(test_data_X)
@@ -88,6 +176,18 @@ class peptide_detected():
         return X_train, y_train, X_test, y_test
 
     def create_model(self, model:str, layer_1= None, layer_2= None ,linear = False):
+        """
+            Create a neural network model.
+
+            Args:
+                model (str): Type of model to create.
+                layer_1 (int): Number of nodes in the first hidden layer.
+                layer_2 (int): Number of nodes in the second hidden layer.
+                linear (bool): Flag indicating whether the model is linear.
+
+            Returns:
+                None
+            """
         if model == "SimpleNN":
             self.models["SimpleNN"] = snn.SimpleNN(input_size=180, hidden_size_1=180,hidden_size_2=180, weight_fn=self.weight_fn, weight_fp=self.weight_fp)
         if model == "advance_model":
@@ -96,18 +196,48 @@ class peptide_detected():
             self.models["linear_model"] = snn.SimpleNN(input_size=180,hidden_size_1=layer_1, hidden_size_2=layer_2, weight_fn=self.weight_fn, weight_fp=self.weight_fp)
 
     def train_model(self, model:str, epoch:int):
+        """
+           Train the specified model.
+
+           Args:
+               model (str): Type of model to train.
+               epoch (int): Number of epochs for training.
+
+           Returns:
+               None
+           """
         self.models[model].train_model(self.X_train, self.y_train,
                                        self.X_test, self.y_test,
                                        epoch, self.loss_data)
 
 
     def test_model(self, model: str, threshold, insert_train:bool = False):
+        """
+            Test the specified model.
+
+            Args:
+                model (str): Type of model to test.
+                threshold: Threshold value for classification.
+                insert_train (bool): Flag indicating whether to test on the training set.
+
+            Returns:
+                Tuple: A tuple containing test results.
+            """
         if insert_train:
             return self.models[model].test_model(self.X_train, self.y_train,
                                                  threshold)
         return self.models[model].test_model(self.X_test, self.y_test, threshold)
 
     def plot_loss(self, model):
+        """
+            Plot the training and test loss over epochs for the specified model.
+
+            Args:
+                model: Name of the model.
+
+            Returns:
+                None
+            """
         train_loss = self.loss_data[0]
         test_loss = self.loss_data[1]
 
@@ -131,6 +261,15 @@ class peptide_detected():
             fig.savefig(f"./plots/{name} - {model}.png")
 
     def plot_roc_curve(self, model):
+        """
+            Plot the Receiver Operating Characteristic (ROC) curve for the specified model.
+
+            Args:
+                model: Name of the model.
+
+            Returns:
+                None
+            """
         fpr, tpr, thresholds, roc_auc = self.models[model].roc_carve(self.X_test, self.y_test)
         plt.figure()
         plt.plot(fpr, tpr, color='darkorange', lw=2,
@@ -154,6 +293,12 @@ class peptide_detected():
 
 
 def make_models():
+    """
+        Main function to train and test different models based on user input.
+
+        Returns:
+            None
+        """
     try_again = True
     detector = None
     user_in = input("Do you want to train a new 180_model? (y/n)")
@@ -226,6 +371,13 @@ def make_models():
             try_again = ask_for_another_try()
 
 def ask_for_another_try():
+    """
+        Prompt the user to try the model training process again.
+
+        Returns:
+            bool: True if the user wants to try again, False otherwise.
+        """
+
     try_again = input("Another try? (y/n)")
     if try_again == 'y':
         try_again = True
@@ -234,6 +386,16 @@ def ask_for_another_try():
     return try_again
 
 def select_threshold(detector: peptide_detected, model):
+    """
+        Select the optimal threshold for the specified model.
+
+        Args:
+            detector (peptide_detected): Instance of the peptide detection class.
+            model: Name of the model.
+
+        Returns:
+            None
+        """
     max_acc = 0
     T = 0
     acc_l = []
@@ -242,12 +404,11 @@ def select_threshold(detector: peptide_detected, model):
         tn, fp, fn, tp, acc = detector.test_model(model, t, insert_train=True)
         acc_l.append(acc)
         T_l.append(t)
-        # print(f't = {t}. accurachy = {acc}')
         if acc > max_acc:
             max_acc = acc
             T = t
-    # print(f'########  for model {model} with {n_epoch} epoch and T = {T}  #######')
     tn, fp, fn, tp, acc = detector.test_model(model, T)
+    detector.threshold = T
     print(f'Total number of positive samples: {tp + fn}, number of false negative mistakes {fn} \n'
           f'Total number of negative samples: {tn + fp} , number of true negative mistakes {fp}\n'
           f'accuracy = {acc}')
@@ -255,65 +416,7 @@ def select_threshold(detector: peptide_detected, model):
 
 if __name__ == '__main__':
     make_models()
-    # p_detected = peptide_detected(pos_path, neg_path)
-    # for model, n_epoch in zip(["SimpleNN", "advance_model"], [30, 40]):
-    #     p_detected = peptide_detected(POS_PATH, NEG_PATH)
-    #     p_detected.loss_data = [[], []]
-    #     p_detected.create_model(model)
-    #     p_detected.train_model(model, 100)
-    #     p_detected.plot_loss(model)
-    #     # p_detected = peptide_detected(POS_PATH, NEG_PATH)
-    #     # p_detected.create_model(model)
-    #     # p_detected.train_model(model, n_epoch)
-    #     select_threshold(p_detected)
 
-    # p_detected.loss_data = [[], []]
-    # p_detected.create_model("SimpleNN")
-    # p_detected.train_model("SimpleNN", 30)
-    # p_detected.plot_loss("SimpleNN")
-    #
-    #
-    # p_detected.plot_roc_curve()
-    #
-    # tn, fp, fn, tp, acc = p_detected.test_model("SimpleNN", 0.5)
-    #
-    # print (f'from numer_of_pos: {tp + fn} wrong on {fn} \n'
-    #        f'from numer_of_neg: {tn + fp} wrong on {fp}\n'
-    #        f'ccurachy = {acc}')
-    #
-    # print("####################################################################")
-    #
-    # p_detected.create_model("advance_model")
-    # p_detected.train_model("advance_model", 40)
-    # p_detected.plot_loss("advance_model")
-    # max_acc = 0
-    # T = 0
-    # acc_l = []
-    # T_l = []
-    # for t in np.linspace(0.1, 1.0, 150):
-    #     tn, fp, fn, tp, acc = p_detected.test_model("advance_model", t, insert_train=True)
-    #     acc_l.append(acc)
-    #     T_l.append(t)
-    #     print(f't = {t}. accurachy = {acc}')
-    #     if acc > max_acc:
-    #         max_acc = acc
-    #         T=t
-
-    # Plotting the graph of threshold vs accuracy
-    # plt.figure(figsize=(10, 6))
-    # plt.plot(T_l, acc_l, marker='o')
-    # plt.title('Threshold vs Accuracy')
-    # plt.xlabel('Threshold (t)')
-    # plt.ylabel('Accuracy')
-    # plt.grid(True)
-    # plt.show()
-
-    # print(f'T = {T}')
-    # tn, fp, fn, tp, acc = p_detected.test_model("advance_model", T)
-    #
-    # print (f'from numer_of_pos: {tp + fn} wrong on {fn} \n'
-    #        f'from numer_of_neg: {tn + fp} wrong on {fp}\n'
-    #        f'accurachy = {acc}')
 
 
 
