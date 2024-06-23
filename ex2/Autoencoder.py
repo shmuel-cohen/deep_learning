@@ -48,19 +48,19 @@ transform = transforms.Compose([
 ])
 
 # Load dataset
-train_dataset = datasets.Flowers102(root='flowers',
-                                    split='train',
-                                    transform=transform,
-                                    download=True)
-test_dataset = datasets.Flowers102(root='flowers',
-                                   split='test',
-                                   transform=transform)
-# Define the dataloader
-train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
-                                           batch_size=128,
-                                           shuffle=True)
-test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
-                                          batch_size=128)
+# Transforms images to a PyTorch Tensor
+tensor_transform = transforms.ToTensor()
+
+# Download the MNIST Dataset
+dataset = datasets.MNIST(root="./data",
+                         train=True,
+                         download=True,
+                         transform=tensor_transform)
+
+# DataLoader is used to load the dataset
+# for training
+loader = torch.utils.data.DataLoader(dataset=dataset,
+                                     batch_size=32,
 
 # Move the model to GPU
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
