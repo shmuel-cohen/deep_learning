@@ -18,10 +18,12 @@ class Autoencoder(nn.Module):
             nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(4, 1, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2)
-
+            nn.Flatten(),
+            nn.Linear(49,12)
         )
         self.decoder = nn.Sequential(
+            nn.Linear(12,49),
+            nn.Unflatten(1,(1,7,7)),
             nn.ConvTranspose2d(1, 4,
                                kernel_size=3,
                                stride=2,
@@ -34,18 +36,13 @@ class Autoencoder(nn.Module):
                                padding=1,
                                output_padding=1),
             nn.ReLU(),
-            nn.ConvTranspose2d(16, 1,
-                               kernel_size=3,
-                               stride=2,
-                               padding=1,
-                               output_padding=1),
             nn.Sigmoid()
         )
 
 
     def forward(self, x):
         x = self.encoder(x)
-        # self.output_dim = x.shape
+        pass
         x = self.decoder(x)
         return x
 
@@ -54,26 +51,22 @@ def run_autoencoder():
     model = Autoencoder()
 
     # Define transform
-    transform = transforms.Compose([
-        transforms.Resize((28, 28)),
-        transforms.ToTensor(),
-    ])
-
+    # transform = transforms.Compose([transforms.ToTensor()])
+    transform = transforms.Compose([transforms.PILToTensor()])
     # Load dataset
     # Transforms images to a PyTorch Tensor
-    tensor_transform = transforms.PILToTensor
 
     # Download the MNIST Dataset
     dataset = datasets.MNIST(root="./data",
                              train=True,
                              download=True,
-                             transform=transforms.Compose([transforms.Pad(2), transforms.PILToTensor()]))
+                             transform=transform)
 
 
     # DataLoader is used to load the dataset
     # for training
     train_loader = torch.utils.data.DataLoader(dataset=dataset,
-                                         batch_size=32,)
+                                         batch_size=256,)
 
     # Define the loss function and optimizer
     criterion = nn.L1Loss()
@@ -81,6 +74,7 @@ def run_autoencoder():
 
     # Train the autoencoder
     num_epochs = 30
+    toprint = True
     for epoch in range(num_epochs):
         for data in train_loader:
             optimizer.zero_grad()
