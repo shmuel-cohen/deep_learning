@@ -43,24 +43,25 @@ model = Autoencoder()
 
 # Define transform
 transform = transforms.Compose([
-    transforms.Resize((64, 64)),
+    transforms.Resize((28, 28)),
     transforms.ToTensor(),
 ])
 
 # Load dataset
 # Transforms images to a PyTorch Tensor
-tensor_transform = transforms.ToTensor()
+tensor_transform = transforms.PILToTensor
 
 # Download the MNIST Dataset
 dataset = datasets.MNIST(root="./data",
                          train=True,
                          download=True,
-                         transform=tensor_transform)
+                         transform=transforms.Compose([transforms.Pad(2), transforms.PILToTensor()]))
+
 
 # DataLoader is used to load the dataset
 # for training
-loader = torch.utils.data.DataLoader(dataset=dataset,
-                                     batch_size=32,
+train_loader = torch.utils.data.DataLoader(dataset=dataset,
+                                     batch_size=32)
 
 # Move the model to GPU
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -68,16 +69,17 @@ print(device)
 model.to(device)
 
 # Define the loss function and optimizer
-criterion = nn.MSELoss()
+criterion = nn.L1Loss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # Train the autoencoder
-num_epochs = 50
+num_epochs = 10
 for epoch in range(num_epochs):
     for data in train_loader:
+        optimizer.zero_grad()
         img, _ = data
         img = img.to(device)
-        optimizer.zero_grad()
+        img = img/255
         output = model(img)
         loss = criterion(output, img)
         loss.backward()
