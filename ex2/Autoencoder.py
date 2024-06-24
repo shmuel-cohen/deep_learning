@@ -1,95 +1,50 @@
 import torch
+from torch.utils.data import DataLoader, Subset
 import torch.nn as nn
 import torch.optim as optim
-import torchvision.datasets as datasets
-import torchvision.transforms as transforms
+from torchvision import datasets, transforms
+from torch.utils.data import DataLoader
+# import matplotlib as plt
+import matplotlib.pyplot as plt
+from tqdm import tqdm
 
-
-# Define the autoencoder architecture
-class Autoencoder(nn.Module):
+class Encoder(nn.Module):
     def __init__(self):
-        super(Autoencoder, self).__init__()
-        self.encoder = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(16, 4, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(4, 1, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear(49,12)
-        )
-        self.decoder = nn.Sequential(
-            nn.Linear(12,49),
-            nn.Unflatten(1,(1,7,7)),
-            nn.ConvTranspose2d(1, 4,
-                               kernel_size=3,
-                               stride=2,
-                               padding=1,
-                               output_padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(4, 16,
-                               kernel_size=3,
-                               stride=2,
-                               padding=1,
-                               output_padding=1),
-            nn.ReLU(),
-            nn.Sigmoid()
-        )
+        super(Encoder, self).__init__()
+        self.seq = nn.Sequential(nn.Conv2d(1, 4, kernel_size=5, padding=2), nn.ReLU(),
+                                  nn.MaxPool2d(kernel_size=2, stride=2, padding=0),
+                                    nn.Conv2d(4, 16, kernel_size=3, padding=1),nn.ReLU(),
+                                  nn.MaxPool2d(kernel_size=2, stride=2, padding=0),
+                                  nn.Conv2d(16, 32, kernel_size=3, padding=1),nn.ReLU(),
+                                  nn.Flatten(),nn.Linear(32 * 49, 128),nn.ReLU(),nn.Linear(128, 12),nn.ReLU()
+                                  )
 
+    def forward(self, x):
+        return self.seq(x)
+
+
+class Decoder(nn.Module):
+    def __init__(self):
+        super(Decoder, self).__init__()
+        self.seq1 = nn.Sequential(nn.Linear(12, 128), nn.ReLU(), nn.Linear(128, 32 * 49), nn.ReLU())
+        self.seq2 = nn.Sequential(nn.ConvTranspose2d(32, 16, kernel_size=3, stride=2, padding=1, output_padding=1),
+        nn.ReLU(), nn.ConvTranspose2d(16, 1, kernel_size=3, stride=2, padding=1, output_padding=1), nn.Sigmoid())
+
+    def forward(self, x):
+        x =self.seq1(x)
+        x = x.view(-1, 32, 7, 7)
+        x =self.seq2(x)
+        return x
+
+# Model for #1
+class Autoencoder(nn.Module):
+    def __init__(self, ):
+        super(Autoencoder, self).__init__()
+        self.encoder = Encoder()
+        # self.mlp = MPL(latent_dim)
+        self.decoder = Decoder()
 
     def forward(self, x):
         x = self.encoder(x)
-        pass
         x = self.decoder(x)
         return x
-
-def run_autoencoder():
-    # Initialize the autoencoder
-    model = Autoencoder()
-
-    # Define transform
-    # transform = transforms.Compose([transforms.ToTensor()])
-    transform = transforms.Compose([transforms.PILToTensor()])
-    # Load dataset
-    # Transforms images to a PyTorch Tensor
-
-    # Download the MNIST Dataset
-    dataset = datasets.MNIST(root="./data",
-                             train=True,
-                             download=True,
-                             transform=transform)
-
-
-    # DataLoader is used to load the dataset
-    # for training
-    train_loader = torch.utils.data.DataLoader(dataset=dataset,
-                                         batch_size=256,)
-
-    # Define the loss function and optimizer
-    criterion = nn.L1Loss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-    # Train the autoencoder
-    num_epochs = 30
-    toprint = True
-    for epoch in range(num_epochs):
-        for data in train_loader:
-            optimizer.zero_grad()
-            img, _ = data
-            img = img/255
-            output = model(img)
-            loss = criterion(output, img)
-            loss.backward()
-            optimizer.step()
-        # if epoch % 5 == 0:
-        print('Epoch [{}/{}], Loss: {:.8f}'.format(epoch + 1, num_epochs, loss.item()))
-
-    # Save the model
-    torch.save(model.state_dict(), 'conv_autoencoder.pth')
-
-
-if __name__ == '__main__':
-    run_autoencoder()
