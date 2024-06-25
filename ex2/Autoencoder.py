@@ -11,6 +11,10 @@ from tqdm import tqdm
 class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        self.to(self.device)
+
         self.seq = nn.Sequential(nn.Conv2d(1, 4, kernel_size=5, padding=2), nn.ReLU(),
                                   nn.MaxPool2d(kernel_size=2, stride=2, padding=0),
                                     nn.Conv2d(4, 16, kernel_size=3, padding=1),nn.ReLU(),
@@ -41,7 +45,6 @@ class Autoencoder(nn.Module):
     def __init__(self, ):
         super(Autoencoder, self).__init__()
         self.encoder = Encoder()
-        # self.mlp = MPL(latent_dim)
         self.decoder = Decoder()
 
     def forward(self, x):

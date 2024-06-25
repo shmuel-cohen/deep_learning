@@ -10,8 +10,12 @@ from tqdm import tqdm
 from Autoencoder import Encoder
 
 class Classifier(nn.Module):
-    def __init__(self, latent_dim):
+    def __init__(self):
         super(Classifier, self).__init__()
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        self.to(self.device)
+
         self.seq = nn.Sequential(nn.Linear(12, 128), nn.ReLU(), nn.Linear(128, 10), nn.Sigmoid())
         self.encoder = Encoder()
 
