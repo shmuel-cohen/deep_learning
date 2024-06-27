@@ -1,17 +1,19 @@
 import torch
+import random
 from torch.utils.data import DataLoader, Subset
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import datasets, transforms
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset, random_split
 # import matplotlib as plt
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import Autoencoder
 import Classifier
+import Pretrained_encoder
 import numpy as np
 
-NUM_EPOCHS = 15
+NUM_EPOCHS = 7
 BATCH_SIZE = 256
 def data_loader():
     global train_loader, test_loader
@@ -23,7 +25,7 @@ def data_loader():
     test_dataset = datasets.MNIST(root='./data', train=False, transform=transform, download=True)
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True)
-    return train_loader, test_loader
+    return train_loader, test_loader, test_dataset
 
 def Q1(train_loader):
     model = Autoencoder.Autoencoder()
@@ -36,15 +38,13 @@ def Q1(train_loader):
             optimizer.zero_grad()
             output = model(data_batch)
 
-            img_tensor = output[0].squeeze().detach().cpu().numpy()  # Squeeze and convert to numpy
-            plt.imshow(img_tensor, cmap='gray')
-            plt.show()
-
             loss = criterion(output, data_batch)
             loss.backward()
             optimizer.step()
             train_loss += loss.item()
         print(train_loss)
+
+    return model
 
 def Q2(train_loader, test_loader):
     model = Classifier.Classifier()
@@ -117,6 +117,76 @@ def Q2(train_loader, test_loader):
     plt.legend()
     plt.savefig('accuracy_plot.png')
     plt.show()
+    return model.encoder
+
+
+def Q3(train_loader, test_data, pretrained_encoder, AE,):
+    pre_AE = train_AE_with_fixed_encoder(pretrained_encoder, train_loader)
+    compare_RC_images(AE, pre_AE, test_data, 10)
+
+
+def train_AE_with_fixed_encoder(pretrained_encoder, train_loader):
+    model = Pretrained_encoder.PretrainedEncoderAE(pretrained_encoder)
+    criterion = nn.L1Loss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    for epoch in range(NUM_EPOCHS):
+        train_loss = 0
+        for data_batch, label_batch in train_loader:
+            optimizer.zero_grad()
+            output = model(data_batch)
+            loss = criterion(output, data_batch)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+
+    return model
+
+
+def compare_RC_images(AE, pre_AE, test_dataset, num_images):
+    original_images = []
+    AE_RC = []
+    preAE_RC =[]
+
+    random_indices = random.choices(range( len(test_dataset)), k=num_images)
+    subset = Subset(test_dataset, random_indices)
+
+    for img, label in subset:
+        img = img.unsqueeze(0)
+
+        AE_out= AE(img)
+        preAE_out = pre_AE(img)
+
+        original_images.append(img)
+        AE_RC.append(AE_out)
+        preAE_RC.append(preAE_out)
+
+    fig, axes = plt.subplots(3, num_images, figsize=(15, 5))
+
+    # Plot original images in the first row
+    for i in range(num_images):
+        original_img = original_images[i].squeeze(0).squeeze(0)
+        axes[0, i].imshow(original_img.detach().numpy())
+        axes[0, i].axis('off')  # Hide axes
+
+    # Plot reconstructed images in the second row
+    for i in range(num_images):
+        AE_RC_image = AE_RC[i].squeeze(0).squeeze(0)
+        axes[1, i].imshow(AE_RC_image.detach().numpy())
+        axes[1, i].axis('off')  # Hide axes
+
+    for i in range(num_images):
+        preAE_RC_image = preAE_RC[i].squeeze(0).squeeze(0)
+        axes[2, i].imshow(preAE_RC_image.detach().numpy())
+        axes[2, i].axis('off')  # Hide axes
+
+    # Set the title for each row
+    axes[0, 0].set_title('Original Images', fontsize=16, loc='left')
+    axes[1, 0].set_title('AE reconstructed images', fontsize=16, loc='left')
+    axes[2, 0].set_title('Pretrained encoder AE reconstructed Images', fontsize=16, loc='left')
+
+    plt.tight_layout()
+    plt.show()
+
 
 
 
@@ -126,7 +196,7 @@ def one_hot_encode(batch_labels, num_classes=10):
     # Create a zero matrix of shape (batch_size, num_classes)
     one_hot_vectors = np.zeros((len(batch_labels), num_classes))
 
-    # Set the value at the index corresponding to each label to 1.000
+    # Set the value at the index corresponding to each label to 1
     for i, label in enumerate(batch_labels):
         one_hot_vectors[i, label] = 1
 
@@ -134,6 +204,11 @@ def one_hot_encode(batch_labels, num_classes=10):
 
 
 if __name__ == '__main__':
-    train_loader, test_loader = data_loader()
-    # Q1(train_loader)
-    Q2(train_loader, test_loader)
+    train_loader, test_loader, test_data = data_loader()
+    AE= Q1(train_loader)
+    pretrained_encoder = Q2(train_loader, test_loader)
+    #
+    # AE = Autoencoder.Autoencoder()
+    # pretrained_encoder = Autoencoder.Encoder()
+
+    Q3(train_loader, test_data, pretrained_encoder, AE)
