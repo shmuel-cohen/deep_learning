@@ -13,7 +13,7 @@ import Classifier
 import Pretrained_encoder
 import numpy as np
 
-NUM_EPOCHS = 30
+NUM_EPOCHS = 10
 BATCH_SIZE = 256
 PATH_TO_SAVED_AE = ""
 def data_loader():
@@ -99,7 +99,7 @@ def Q1_S(train_loader, test_loader):
     # plt.savefig('accuracy_plot.png')
     # plt.show()
     # print(train_accuracy)
-    return model.encoder
+    return model
 
 def Q1(train_loader):
     model = Autoencoder.Autoencoder()
@@ -150,7 +150,6 @@ def Q2(train_loader, test_loader, trained_encoder= None):
             total_train += label_batch.size(0)
 
         train_loss.append(agg_train_loss / len(train_loader))
-        # train_accuracy.append(100 * correct_train / total_train)
 
 
         model.eval()
@@ -186,7 +185,6 @@ def Q2(train_loader, test_loader, trained_encoder= None):
     plt.show()
 
     plt.subplot(1, 2, 2)
-    # plt.plot(train_accuracy, label='Train Accuracy')
     plt.plot(test_accuracy, label='Test Accuracy')
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy (%)')
@@ -194,7 +192,6 @@ def Q2(train_loader, test_loader, trained_encoder= None):
     plt.legend()
     plt.savefig('accuracy_plot.png')
     plt.show()
-    # print(train_accuracy)
     return model.encoder
 
 
@@ -206,7 +203,7 @@ def Q3(train_loader, test_data, pretrained_encoder, AE,):
 def train_AE_with_fixed_encoder(pretrained_encoder, train_loader):
     model = Pretrained_encoder.PretrainedEncoderAE(pretrained_encoder)
     criterion = nn.L1Loss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
     for epoch in range(NUM_EPOCHS):
         train_loss = 0
         for data_batch, label_batch in train_loader:
@@ -300,17 +297,13 @@ def Q4(test_loader, trained_encoder= None):
     #                                                shuffle=True, num_workers=0)
     Q2(train_loader, test_loader, trained_encoder)
 
-def Q5(test_loader):
-    # Save the pre-trained encoder
-    # torch.save(encoder.state_dict(), 'pretrained_encoder.pth') #todo enter to any function in Q1
-    encoder = Autoencoder.Autoencoder()
-    encoder.load_state_dict(torch.load(PATH_TO_SAVED_AE))
+def Q5(test_loader, encoder):
     Q4(test_loader, encoder)
 
 
 if __name__ == '__main__':
     train_loader, test_loader, test_data = data_loader()
-    Q1_S(train_loader, test_loader)
+    AE = Q1_S(train_loader, test_loader)
     # Q2(train_loader, test_loader)
     # AE= Q1(train_loader)
     # pretrained_encoder = Q2(train_loader, test_loader)
@@ -321,3 +314,4 @@ if __name__ == '__main__':
     # Q3(train_loader, test_data, pretrained_encoder, AE)
 
     # Q4(test_loader)
+    Q5(test_loader, AE.encoder)
